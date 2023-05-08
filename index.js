@@ -26,12 +26,41 @@ const client = new MongoClient(uri, {
 async function run(){
 
     try{
-        const appointmentOptionCollection = client.db('lawyerPoint').collection('availableAppointments');
+        const availableAppointmentsCollection = client.db('lawyerPoint').collection('availableAppointments');
+
+        const reservesCollection = client.db('lawyerPoint').collection('reserves');
 
         app.get('/availableAppointments', async(req, res) => {
+            const date = req.query.date;
             const query = {};
-            const options = await appointmentOptionCollection.find(query).toArray();
+            const options = await availableAppointmentsCollection.find(query).toArray();
+            const reserveQuery = {appointmentDate: date}
+            const reserved = await reservesCollection.find(reserveQuery).toArray();
+            options.forEach(option => {
+              const optionReserved = reserved.filter(reserv => reserv.lawsuit === option.name);
+              const reservedTimes = optionReserved.map(reserv => reserv.time)
+              const remainingTimes = option.times.filter(time => !reservedTimes.includes(time))
+              option.times = remainingTimes;
+            })
             res.send(options);
+        });
+
+        app.post('/reserves', async(req, res) => {
+          const reserve = req.body;
+          const query = {
+            appointmentDate: reserve.appointmentDate,
+            email: reserve.email,
+            lawsuit: reserve.lawsuit
+          }
+
+          const alreadyReserved = await reservesCollection.find(query).toArray();
+          if(alreadyReserved.length){
+            const message = `You have reserved an appointment on ${reserve.appointmentDate}`
+            return res.send({acknowledged: false, message})
+          }
+
+          const result = await reservesCollection.insertOne(reserve);
+          res.send(result);
         })
     }
     finally{
