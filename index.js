@@ -45,6 +45,13 @@ async function run(){
             res.send(options);
         });
 
+        app.get('/reserves', async(req, res) => {
+          const email = req.query.email;
+          const query = {email: email};
+          const reserves = await reservesCollection.find(query).toArray();
+          res.send(reserves);
+        })
+
         app.post('/reserves', async(req, res) => {
           const reserve = req.body;
           const query = {
