@@ -25,9 +25,9 @@ const client = new MongoClient(uri, {
   }
 });
 
-//verifyJWT
+//verifyJWT middleware
 
-function verifyJWT(req, res, next){
+const  verifyJWT = (req, res, next) =>{
   const authHeader = req.headers.authorization;
   if(!authHeader){
     return res.status(401).send('unauthorized access')
@@ -54,6 +54,18 @@ async function run(){
         const usersCollection = client.db('lawyerPoint').collection('users');
 
         const lawyersCollection = client.db('lawyerPoint').collection('lawyers');
+
+        // verifyAdmin middleware
+        const verifyAdmin = async (req, res, next) => {
+          const decodedEmail = req.decoded.email;
+          const query = {email: decodedEmail};
+          const user = await usersCollection.findOne(query);
+
+          if(user?.role !== 'admin'){
+            return res.status(403).send({message: 'forbidden access'})
+          }
+          next()
+        }
 
         app.get('/availableAppointments', async(req, res) => {
             const date = req.query.date;
@@ -132,8 +144,8 @@ async function run(){
         app.post('/users', async(req, res) => {
           const user = req.body;
           const email = user.email;
-          const search = await usersCollection.find({email}).toArray();
-          if(search.length === 0){
+          const filter = await usersCollection.find({email}).toArray();
+          if(filter.length === 0){
             const result = await usersCollection.insertOne(user);
             res.send(result);
           }
@@ -141,14 +153,7 @@ async function run(){
             
         });
 
-        app.put('/users/admin/:id', async(req, res) => {
-          const decodedEmail = req.decoded.email;
-          const query = {email: decodedEmail};
-          const user = await usersCollection.findOne(query);
-
-          if(user?.role !== 'admin'){
-            return res.status(403).send({message: 'forbidden access'})
-          }
+        app.put('/users/admin/:id', verifyJWT, verifyAdmin, async(req, res) => {
           const id = req.params.id;
           const filter = { _id: new ObjectId(id) }
           const options = {upsert: true};
@@ -161,17 +166,24 @@ async function run(){
           res.send(result);
         });
 
-        app.get('/lawyers', async(req, res) => {
+        app.get('/lawyers', verifyJWT, verifyAdmin, async(req, res) => {
           const query = {};
           const lawyers = await lawyersCollection.find(query).toArray();
           res.send(lawyers);
 
         })
 
-        app.post('/lawyers', async(req, res) => {
+        app.post('/lawyers', verifyJWT, verifyAdmin, async(req, res) => {
           const lawyer = req.body;
           const result = await lawyersCollection.insertOne(lawyer);
-          res.send(lawyer)
+          res.send(result)
+        });
+
+        app.delete('/lawyers/:id', verifyJWT, verifyAdmin, async(req, res) => {
+          const id = req.params.id;
+          const filter = { _id: new ObjectId(id) };
+          const result = await lawyersCollection.deleteOne(filter);
+          res.send(result)
         })
     }
     finally{
