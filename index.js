@@ -53,6 +53,8 @@ async function run(){
 
         const usersCollection = client.db('lawyerPoint').collection('users');
 
+        const lawyersCollection = client.db('lawyerPoint').collection('lawyers');
+
         app.get('/availableAppointments', async(req, res) => {
             const date = req.query.date;
             const query = {};
@@ -157,6 +159,19 @@ async function run(){
           }
           const result = await usersCollection.updateOne(filter, updatedDoc, options);
           res.send(result);
+        });
+
+        app.get('/lawyers', async(req, res) => {
+          const query = {};
+          const lawyers = await lawyersCollection.find(query).toArray();
+          res.send(lawyers);
+
+        })
+
+        app.post('/lawyers', async(req, res) => {
+          const lawyer = req.body;
+          const result = await lawyersCollection.insertOne(lawyer);
+          res.send(lawyer)
         })
     }
     finally{
