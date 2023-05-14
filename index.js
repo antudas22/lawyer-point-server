@@ -4,6 +4,8 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
 
+const stripe = require("stripe")(process.env.STRIPE_SK);
+
 const port = process.env.PORT || 5000;
 
 const app = express();
@@ -26,7 +28,6 @@ const client = new MongoClient(uri, {
 });
 
 //verifyJWT middleware
-
 const  verifyJWT = (req, res, next) =>{
   const authHeader = req.headers.authorization;
   if(!authHeader){
@@ -54,6 +55,8 @@ async function run(){
         const usersCollection = client.db('lawyerPoint').collection('users');
 
         const lawyersCollection = client.db('lawyerPoint').collection('lawyers');
+
+        const paymentsCollection = client.db('lawyerPoint').collection('payments');
 
         // verifyAdmin middleware
         const verifyAdmin = async (req, res, next) => {
@@ -97,6 +100,14 @@ async function run(){
           const query = {email: email};
           const reserves = await reservesCollection.find(query).toArray();
           res.send(reserves);
+        });
+
+        app.get('/reserves/:id', async(req, res) => {
+          const id = req.params.id;
+          const query = {_id: new ObjectId(id)};
+          const reserve = await reservesCollection.findOne(query);
+          res.send(reserve);
+
         })
 
         app.post('/reserves', async(req, res) => {
@@ -114,6 +125,38 @@ async function run(){
           }
 
           const result = await reservesCollection.insertOne(reserve);
+          res.send(result);
+        });
+
+        //stripe
+        app.post('/create-payment-intent', async(req, res) => {
+          const reserve = req.body;
+          const fee = reserve.fee;
+          const amount = fee * 100;
+          const paymentIntent = await stripe.paymentIntents.create({
+            currency: 'usd',
+            amount: amount,
+            "payment_method_types": [
+              "card"
+            ]
+          });
+          res.send({
+            clientSecret: paymentIntent.client_secret,
+          });
+        });
+
+        app.post('/payments', async(req, res) => {
+          const payment = req.body;
+          const result = await paymentsCollection.insertOne(payment);
+          const id = payment.reserveId
+          const filter = {_id: new ObjectId(id)}
+          const updatedDoc = {
+            $set: {
+              paid: true,
+              transactionId: payment.transactionId
+            }
+          }
+          const updatedResult = await reservesCollection.updateOne(filter, updatedDoc)
           res.send(result);
         })
 
@@ -160,6 +203,19 @@ async function run(){
           const updatedDoc = {
             $set: {
               role: 'admin'
+            }
+          }
+          const result = await usersCollection.updateOne(filter, updatedDoc, options);
+          res.send(result);
+        });
+
+        app.put('/users/user/:id', verifyJWT, verifyAdmin, async(req, res) => {
+          const id = req.params.id;
+          const filter = { _id: new ObjectId(id) }
+          const options = {upsert: true};
+          const updatedDoc = {
+            $set: {
+              role: 'user'
             }
           }
           const result = await usersCollection.updateOne(filter, updatedDoc, options);
