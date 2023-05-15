@@ -233,11 +233,23 @@ async function run(){
           res.send(result);
         });
 
-        app.get('/lawyers', verifyJWT, verifyAdmin, async(req, res) => {
+        app.get('/manageLawyers', verifyJWT, verifyAdmin, async(req, res) => {
           const query = {};
           const lawyers = await lawyersCollection.find(query).toArray();
           res.send(lawyers);
+        })
 
+        app.get('/ourLawyers', async(req, res) => {
+          const query = {};
+          const cursor = lawyersCollection.find(query);
+          const lawyers = await cursor.limit(3).toArray();
+          res.send(lawyers);
+        })
+
+        app.get('/allLawyers', async(req, res) => {
+          const query = {};
+          const lawyers = await lawyersCollection.find(query).toArray();
+          res.send(lawyers);
         })
 
         app.post('/lawyers', verifyJWT, verifyAdmin, async(req, res) => {
