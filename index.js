@@ -3,6 +3,8 @@ const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
+const mg = require('nodemailer-mailgun-transport');
 
 const stripe = require("stripe")(process.env.STRIPE_SK);
 
@@ -26,6 +28,32 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   }
 });
+
+function sendReserveEmail(reserve){
+  const {email, lawsuit, appointmentDate, time, client} = reserve;
+
+  const auth = {
+    auth: {
+      api_key: process.env.MAILGUN_EMAIL_KEY,
+      domain: process.env.MAILGUN_SEND_EMAIL_DOMAIN
+    }
+  }
+  
+  const transporter = nodemailer.createTransport(mg(auth));
+
+  transporter.sendMail({
+    from: '20antu20@gmail.com', // sender address
+    to: email, // list of receivers
+    subject: `Reserved an appointment for ${lawsuit}`, // Subject line
+    text: "Hello world?", // plain text body
+    html: `
+      <h2>You have successfully reserved an appointment with ${lawsuit}.</h2>
+      <p>Regarding the confirmation of an appointment with you, I am writing this email. I want to discuss with you about your problem at our office ${appointmentDate} at ${time}.</p>
+      <p>I am looking forward for our meeting on ${appointmentDate} at ${time}. Once again I would like to thank you for your consideration.</p>
+      <p>Thanks from Lawyer Point.</p>
+    `, // html body
+  });
+}
 
 //verifyJWT middleware
 const  verifyJWT = (req, res, next) =>{
@@ -85,6 +113,8 @@ async function run(){
             res.send(options);
         });
 
+
+
         app.get('/specialistIn', async(req, res) => {
           const query = {}
           const result = await availableAppointmentsCollection.find(query).project({name: 1}).toArray();
@@ -125,6 +155,8 @@ async function run(){
           }
 
           const result = await reservesCollection.insertOne(reserve);
+          //send email
+          sendReserveEmail(reserve);
           res.send(result);
         });
 
@@ -243,7 +275,7 @@ async function run(){
           const query = {};
           const cursor = lawyersCollection.find(query);
           const lawyers = await cursor.limit(3).toArray();
-          res.send(lawyers);
+          res.send(lawyers.reverse());
         })
 
         app.get('/allLawyers', async(req, res) => {
